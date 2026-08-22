@@ -1,0 +1,213 @@
+"""RobloxForge - MCP server (dependency-free).
+
+Speaks the MCP stdio wire protocol directly (newline-delimited JSON-RPC
+2.0): initialize / tools/list / tools/call / ping. Works with any MCP
+client:
+
+    "robloxforge": {
+        "command": "python",
+        "args": ["<forge>\\mcp_server\\server.py"]
+    }
+
+SMALL ON PURPOSE. The official Roblox Studio MCP owns the live engine.
+This server owns intelligence: doctor, capabilities, current docs, project
+analysis, reviews, verification. Every tool wraps the SAME core the CLI
+uses; results are JSON text.
+
+Register it alongside (not instead of) the official Roblox_Studio server:
+    hermes mcp add robloxforge --command python --args <path>\\server.py
+"""
+import json
+import os
+import sys
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "src"))
+
+from rbforge.errors import ForgeError
+
+PROTOCOL_VERSION = "2024-11-05"
+SERVER_INFO = {"name": "robloxforge", "version": "0.1.0"}
+
+TOOLS = {}
+
+
+def tool(name, schema, desc):
+    def deco(fn):
+        TOOLS[name] = (fn, schema, desc)
+        return fn
+    return deco
+
+
+# ------------------------------------------------------------------ state
+
+@tool("rb_doctor", {"type": "object", "properties": {
+    "probe": {"type": "boolean", "default": True},
+    "host_vision": {"type": "boolean",
+                    "description": "true if you (the calling model) can inspect images"}},
+      }, "Full health report: Studio, official MCP handshake, docs cache, "
+         "toolchain, agent integrations. Run this FIRST in any session.")
+def _doctor(a):
+    from rbforge import doctor
+    return doctor.collect(probe=a.get("probe", True),
+                          host_vision=a.get("host_vision"))
+
+
+@tool("rb_capabilities", {"type": "object", "properties": {}},
+      "Honest capability matrix derived from live probes. Never assume a "
+      "status; ask this before attempting anything.")
+def _capabilities(a):
+    from rbforge import capabilities
+    return capabilities.compute(host_vision=a.get("host_vision"))
+
+
+@tool("rb_docs_search", {"type": "object", "properties": {
+    "query": {"type": "string"}, "limit": {"type": "integer", "default": 8}},
+      "required": ["query"]},
+      "Search CURRENT official Roblox creator-docs. Exact API names win: "
+      "'TweenService:Create', 'ProcessReceipt', 'StreamingEnabled'.")
+def _docs_search(a):
+    from rbforge import docs
+    return docs.search(a["query"], limit=int(a.get("limit", 8)))
+
+
+@tool("rb_docs_read", {"type": "object", "properties": {
+    "path": {"type": "string"}, "max_chars": {"type": "integer", "default": 8000},
+    "around": {"type": "string"}}, "required": ["path"]},
+      "Read one cached doc page (bounded). Use a path from rb_docs_search.")
+def _docs_read(a):
+    from rbforge import docs
+    return docs.read(a["path"], max_chars=int(a.get("max_chars", 8000)),
+                     around=a.get("around"))
+
+
+@tool("rb_docs_update", {"type": "object", "properties": {}},
+      "Refresh the creator-docs cache via git. Offline failure keeps the "
+      "cached copy and reports honestly.")
+def _docs_update(a):
+    from rbforge import docs
+    return docs.ensure(refresh=True)
+
+
+@tool("rb_project_analyze", {"type": "object", "properties": {
+    "path": {"type": "string", "description": "filesystem project root; omit to auto-detect cwd"}},
+      },
+      "Analyze an existing filesystem project (Rojo or script-tree style): "
+      "style, scripts, client/server split, remotes, DataStores, hazards.")
+def _project_analyze(a):
+    from rbforge import project
+    root = a.get("path") or os.getcwd()
+    return project.analyze(root)
+
+
+@tool("rb_vertical_slice_plan", {"type": "object", "properties": {
+    "genre": {"type": "string", "enum": ["generic", "obby", "simulator", "tycoon"]},
+    "premise": {"type": "string"}}, "required": ["genre", "premise"]},
+      "Turn a premise into the smallest playable vertical slice plan with "
+      "authority boundaries and verification steps. Use BEFORE building.")
+def _slice_plan(a):
+    from rbforge import planning
+    return planning.vertical_slice(a["genre"], a["premise"])
+
+
+@tool("rb_architecture_review", {"type": "object", "properties": {
+    "path": {"type": "string"},
+    "live": {"type": "boolean", "default": False,
+             "description": "review the live Studio place instead of files"}},
+      },
+      "Static architecture review of Luau sources: ownership violations, "
+      "monoliths, placement problems. Static heuristics, not a runtime proof.")
+def _arch_review(a):
+    from rbforge import review
+    return review.architecture(path=a.get("path"), live=a.get("live", False))
+
+
+@tool("rb_security_review", {"type": "object", "properties": {
+    "path": {"type": "string"},
+    "live": {"type": "boolean", "default": False}},
+      },
+      "Security review: client-authority patterns, unvalidated remotes, "
+      "client-owned currency/damage/teleport. RemoteEvent != authorization.")
+def _sec_review(a):
+    from rbforge import review
+    return review.security(path=a.get("path"), live=a.get("live", False))
+
+
+@tool("rb_verify_receipt", {"type": "object", "properties": {
+    "task": {"type": "string"},
+    "checks": {"type": "array", "items": {"type": "string"}},
+    "console_errors": {"type": "integer", "default": 0},
+    "playtest_performed": {"type": "boolean"},
+    "screenshot_captured": {"type": "boolean"},
+    "screenshot_inspected": {"type": "boolean"},
+    "limitations": {"type": "string"}}},
+      "Record a verification receipt for completed work. Evidence-gated: "
+      "claims without playtest evidence are recorded as UNVERIFIED.")
+def _verify_receipt(a):
+    from rbforge import verification
+    return verification.receipt(**a)
+
+
+@tool("rb_toolchain_status", {"type": "object", "properties": {}},
+      "Status of optional Luau tooling (rojo, stylua, selene, luau-lsp, rokit).")
+def _toolchain(a):
+    from rbforge import tooling
+    return tooling.status()
+
+
+# ------------------------------------------------------------------ wire
+
+def _j(obj):
+    return json.dumps(obj, indent=2, default=str)
+
+
+def handle(req):
+    method = req.get("method")
+    if method == "initialize":
+        return {"jsonrpc": "2.0", "id": req.get("id"),
+                "result": {"protocolVersion": PROTOCOL_VERSION,
+                           "capabilities": {"tools": {}}, "serverInfo": SERVER_INFO}}
+    if method == "notifications/initialized" or method is None:
+        return None
+    if method == "ping":
+        return {"jsonrpc": "2.0", "id": req.get("id"), "result": {}}
+    if method == "tools/list":
+        return {"jsonrpc": "2.0", "id": req.get("id"),
+                "result": {"tools": [{"name": n, "description": d, "inputSchema": s}
+                                     for n, (f, s, d) in sorted(TOOLS.items())]}}
+    if method == "tools/call":
+        name = (req.get("params") or {}).get("name")
+        args = (req.get("params") or {}).get("arguments") or {}
+        entry = TOOLS.get(name)
+        if not entry:
+            return {"jsonrpc": "2.0", "id": req.get("id"),
+                    "error": {"code": -32602, "message": "unknown tool %r" % name}}
+        fn, _, _ = entry
+        try:
+            out = fn(args)
+            return {"jsonrpc": "2.0", "id": req.get("id"),
+                    "result": {"content": [{"type": "text", "text": _j(out)}]}}
+        except ForgeError as exc:
+            return {"jsonrpc": "2.0", "id": req.get("id"),
+                    "result": {"content": [{"type": "text", "text": _j(exc.to_dict())}],
+                               "isError": True}}
+    return {"jsonrpc": "2.0", "id": req.get("id"),
+            "error": {"code": -32601, "message": "method not found: %r" % method}}
+
+
+def serve():
+    for line in sys.stdin:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            req = json.loads(line)
+        except ValueError:
+            continue
+        resp = handle(req)
+        if resp is not None:
+            sys.stdout.write(json.dumps(resp) + "\n")
+            sys.stdout.flush()
+
+
+if __name__ == "__main__":
+    serve()

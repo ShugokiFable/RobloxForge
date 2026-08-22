@@ -1,0 +1,141 @@
+{
+  "generated_utc": "2026-08-22",
+  "purpose": "High-value upstream sources for RobloxForge. Mostly referenced/searchable, not vendored.",
+  "official": [
+    {
+      "name": "Roblox creator-docs",
+      "url": "https://github.com/Roblox/creator-docs",
+      "use": "Engine API, Creator docs, Assistant docs; local sparse cache",
+      "license_note": "Repository carries CC-BY-4.0 prose and separate code-sample licensing; preserve attribution if vendoring."
+    },
+    {
+      "name": "Roblox Studio MCP",
+      "url": "https://create.roblox.com/docs/studio/mcp",
+      "use": "Current official MCP setup/tool semantics"
+    },
+    {
+      "name": "Roblox Assistant skills",
+      "url": "https://github.com/Roblox/creator-docs/blob/main/content/en-us/assistant/skills.md",
+      "use": "Built-in specialist skill names and intended workflows"
+    },
+    {
+      "name": "Roblox client/server security",
+      "url": "https://create.roblox.com/docs/scripting/security/client-server-boundary",
+      "use": "Remote/input validation and server authority"
+    },
+    {
+      "name": "Roblox DataStores",
+      "url": "https://create.roblox.com/docs/cloud-services/data-stores",
+      "use": "Persistence semantics and Studio safety"
+    },
+    {
+      "name": "Roblox performance",
+      "url": "https://create.roblox.com/docs/performance-optimization/improve",
+      "use": "Performance best practices"
+    },
+    {
+      "name": "Luau site",
+      "url": "https://github.com/luau-lang/site",
+      "use": "Official Luau language documentation",
+      "license": "MIT"
+    },
+    {
+      "name": "Luau implementation",
+      "url": "https://github.com/luau-lang/luau",
+      "use": "Language releases, analyzer, RFC implementation context",
+      "license": "MIT"
+    }
+  ],
+  "toolchain": [
+    {
+      "name": "Rokit",
+      "url": "https://github.com/rojo-rbx/rokit",
+      "version_snapshot": "1.2.0",
+      "role": "Roblox toolchain manager",
+      "license": "MIT"
+    },
+    {
+      "name": "Rojo",
+      "url": "https://github.com/rojo-rbx/rojo",
+      "version_snapshot": "7.7.0",
+      "role": "Filesystem/Git <-> Studio workflow",
+      "license": "MPL-2.0"
+    },
+    {
+      "name": "StyLua",
+      "url": "https://github.com/JohnnyMorganz/StyLua",
+      "version_snapshot": "2.5.2",
+      "role": "Luau formatter"
+    },
+    {
+      "name": "Selene",
+      "url": "https://github.com/Kampfkarren/selene",
+      "version_snapshot": "0.31.0",
+      "role": "Luau linter"
+    },
+    {
+      "name": "luau-lsp",
+      "url": "https://github.com/JohnnyMorganz/luau-lsp",
+      "version_snapshot": "1.69.0",
+      "role": "Luau LSP / Roblox sourcemap analysis",
+      "license": "MIT"
+    },
+    {
+      "name": "Wally",
+      "url": "https://github.com/UpliftGames/wally",
+      "version_snapshot": "0.3.2",
+      "role": "Roblox package manager"
+    },
+    {
+      "name": "Lune",
+      "url": "https://github.com/lune-org/lune",
+      "version_snapshot": "0.10.5",
+      "role": "Standalone Luau runtime / Roblox data tooling"
+    },
+    {
+      "name": "run-in-roblox",
+      "url": "https://github.com/rojo-rbx/run-in-roblox",
+      "version_snapshot": "0.3.0",
+      "role": "CLI -> Roblox Studio test runner",
+      "license": "MIT"
+    },
+    {
+      "name": "wally-package-types",
+      "url": "https://github.com/JohnnyMorganz/wally-package-types",
+      "version_snapshot": "1.6.2",
+      "role": "Type generation for Wally dependencies"
+    }
+  ],
+  "testing": [
+    {
+      "name": "Jest Roblox",
+      "url": "https://github.com/Roblox/jest-roblox",
+      "role": "Roblox-maintained read-only mirror; production Luau testing lineage",
+      "license": "MIT"
+    },
+    {
+      "name": "Jest Lua",
+      "url": "https://github.com/jsdotlua/jest-lua",
+      "role": "Community continuation/fork for Roblox testing",
+      "license": "MIT"
+    },
+    {
+      "name": "run-in-roblox",
+      "url": "https://github.com/rojo-rbx/run-in-roblox",
+      "role": "Studio automation for source-controlled tests",
+      "license": "MIT"
+    }
+  ],
+  "community_inspiration_not_vendored": [
+    {
+      "name": "roblox-game-skill",
+      "url": "https://github.com/brockmartin/roblox-game-skill",
+      "note": "Useful router/lazy-reference architecture; verify stale MCP mappings before reuse."
+    },
+    {
+      "name": "roblox-skills",
+      "url": "https://github.com/zilibobi/roblox-skills",
+      "note": "Useful local official-doc cache pattern; clean-room synthesis preferred."
+    }
+  ]
+}

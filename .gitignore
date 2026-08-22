@@ -1,0 +1,7 @@
+__pycache__/
+*.py[cod]
+.venv/
+.vscode/
+*.egg-info/
+tmp/
+tmp_e2e/
