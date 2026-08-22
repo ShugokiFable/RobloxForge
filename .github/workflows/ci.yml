@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+        python-version: ["3.11", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Run tests (no Roblox required)
+        run: python tests/run_tests.py
+
+      - name: MCP server boots and answers tools/list
+        shell: bash
+        run: |
+          printf '%s\n' \
+            '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' \
+            '{"jsonrpc":"2.0","method":"notifications/initialized"}' \
+            '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}' \
+            | python mcp_server/server.py > mcp-out.json
+          python - <<'EOF'
+          import json
+          lines = [l for l in open("mcp-out.json") if l.strip()]
+          assert len(lines) == 2, "notification must not be answered: %r" % lines
+          tools = json.loads(lines[1])
+          names = [t["name"] for t in tools["result"]["tools"]]
+          assert len(names) == 11, names
+          print("MCP OK:", len(names), "tools")
+          EOF
+
+      - name: CLI smoke (JSON output)
+        shell: bash
+        run: |
+          python src/rbforge_cli.py doctor --no-probe > /dev/null
+          python src/rbforge_cli.py capabilities > /dev/null
+          python src/rbforge_cli.py agent status > /dev/null
+          python src/rbforge_cli.py skills status > /dev/null
