@@ -146,7 +146,46 @@ def _generic_unsupported(name):
     return {"status": status, "connect": None, "disconnect": None}
 
 
-_grok = lambda: _generic_unsupported("grok")
+def _grok():
+    cfg_path = os.path.join(os.path.expanduser("~"), ".grok", "config.toml")
+    block = ('\n[mcp_servers.robloxforge]\ncommand = "python"\n'
+             'args = ["S:/Apps/Roblox Tools/RobloxForge/mcp_server/server.py"]\n'
+             "enabled = false\n")
+
+    def status(cfg=None):
+        cfg = cfg or cfg_path
+        if not os.path.isfile(cfg):
+            return None
+        text = open(cfg, encoding="utf-8", errors="replace").read()
+        present = "[mcp_servers.robloxforge]" in text
+        off = bool(re.search(r"\[mcp_servers\.robloxforge\][^\[]*?enabled\s*=\s*false",
+                             text, re.S))
+        return {"configured": present, "enabled": not off,
+                "detail": "off by default; grok mcp enable robloxforge to use"}
+
+    def connect(cfg=None):
+        cfg = cfg or cfg_path
+        st = status(cfg)
+        if st and st["configured"]:
+            return "already configured"
+        _backup(cfg)
+        with open(cfg, "a", encoding="utf-8") as fh:
+            fh.write(block)
+        return "added [mcp_servers.robloxforge] (enabled=false) to %s" % cfg
+
+    def disconnect(cfg=None):
+        cfg = cfg or cfg_path
+        if not os.path.isfile(cfg):
+            return "nothing to remove"
+        _backup(cfg)
+        text = open(cfg, encoding="utf-8", errors="replace").read()
+        out = re.sub(r"\n?\[mcp_servers\.robloxforge\]\n(?:[^\[]*\n)?", "\n", text)
+        open(cfg, "w", encoding="utf-8").write(out)
+        return "removed robloxforge block from %s (backup saved)" % cfg
+
+    return {"status": status, "connect": connect, "disconnect": disconnect}
+
+
 _kimi = lambda: _generic_unsupported("kimi")
 
 
