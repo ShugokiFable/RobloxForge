@@ -16,26 +16,29 @@ import subprocess
 import sys
 import time
 
-from . import paths, studio
+from . import paths
 from .errors import ForgeError
 
 PROVIDERS = ("hermes", "claude", "codex", "grok", "kimi")
 
 
 def _mentions(text):
-    """True when output names our server (either registration name)."""
+    """True when output names OUR server. Deliberately does NOT match
+    'roblox-studio'/'roblox_studio' - that is the official Studio MCP, a
+    different registration, and conflating the two would report the forge
+    as configured on machines that only ever added the official one."""
     if not text:
         return False
-    low = text.lower()
-    return "robloxforge" in low or "roblox-studio" in low or "roblox_studio" in low
+    return "robloxforge" in text.lower()
 
 
 # ------------------------------------------------------------------ helpers
 
-def _run(cmd, timeout=120):
+def _run(cmd, timeout=120, feed=None):
+    """feed: stdin text for CLIs that prompt (e.g. hermes mcp add's Y/n)."""
     try:
         return subprocess.run(cmd, capture_output=True, text=True,
-                              timeout=timeout)
+                              input=feed, timeout=timeout)
     except (OSError, subprocess.SubprocessError) as exc:
         return type("R", (), {"returncode": 1, "stdout": "", "stderr": str(exc)})()
 
@@ -75,7 +78,7 @@ def _hermes():
         # `hermes mcp add` prompts "Enable all tools? [Y/n]" interactively;
         # pipe 'y' or it cancels silently.
         done = _run([exe, "mcp", "add", FORGE_SERVER, "--command", argv[0],
-                     "--args", *argv[1:]], timeout=180)
+                     "--args", *argv[1:]], timeout=180, feed="y\n")
         if "Saved" not in (done.stdout or ""):
             raise ForgeError(
                 "RBF-AGENT-002", "hermes mcp add did not save the server",
