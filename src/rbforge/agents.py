@@ -13,13 +13,13 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import time
 
 from . import paths, studio
 from .errors import ForgeError
 
 PROVIDERS = ("hermes", "claude", "codex", "grok", "kimi")
-SERVER_NAME = "Roblox_Studio"
 
 
 def _mentions(text):
@@ -40,6 +40,20 @@ def _run(cmd, timeout=120):
         return type("R", (), {"returncode": 1, "stdout": "", "stderr": str(exc)})()
 
 
+# The forge's own MCP registration. Every provider wires it DISABLED so the
+# 11 rb_* tool schemas do not ride along in unrelated sessions; users flip
+# it on for Roblox work (see README "Token discipline").
+FORGE_SERVER = "robloxforge"
+
+
+def _forge_argv():
+    """[python, <repo>/mcp_server/server.py] resolved from THIS checkout,
+    so a clone anywhere works."""
+    from . import paths
+    script = os.path.join(paths.REPO_ROOT, "mcp_server", "server.py")
+    return [sys.executable or "python", script]
+
+
 def _which(name):
     return paths.which(name)
 
@@ -57,20 +71,25 @@ def _hermes():
                 "detail": (done.stdout or done.stderr).strip()[-300:]}
 
     def connect(_cfg=None):
-        cmd = studio.mcp_command()
+        argv = _forge_argv()
         # `hermes mcp add` prompts "Enable all tools? [Y/n]" interactively;
-        # feed 'y' or it cancels and reports nothing.
-        done = _run([exe, "mcp", "add", SERVER_NAME.lower(),
-                     "--command", cmd[0], "--args", *cmd[1:]])
-        if done.returncode != 0 or "Saved" not in (done.stdout or ""):
-            raise ForgeError("RBF-AGENT-002", "hermes mcp add did not save the server",
-                             hint="run manually: hermes mcp add %s --command %s --args %s "
-                                  "(answer Y at the prompt)"
-                                  % (SERVER_NAME.lower(), cmd[0], " ".join(cmd[1:])))
-        return "added via `hermes mcp add`"
+        # pipe 'y' or it cancels silently.
+        done = _run([exe, "mcp", "add", FORGE_SERVER, "--command", argv[0],
+                     "--args", *argv[1:]], timeout=180)
+        if "Saved" not in (done.stdout or ""):
+            raise ForgeError(
+                "RBF-AGENT-002", "hermes mcp add did not save the server",
+                hint="run manually: hermes mcp add %s --command %s --args \"%s\" "
+                     "(answer Y at the tool-enable prompt), then: "
+                     "hermes config set mcp_servers.%s.enabled false "
+                     "(off by default; enable for Roblox sessions)"
+                     % (FORGE_SERVER, argv[0], argv[1], FORGE_SERVER))
+        _run([exe, "config", "set", "mcp_servers.%s.enabled" % FORGE_SERVER,
+              "false"])
+        return "added via `hermes mcp add`, disabled by default"
 
     def disconnect(_cfg=None):
-        _run([exe, "mcp", "remove", SERVER_NAME.lower()])
+        _run([exe, "mcp", "remove", FORGE_SERVER])
         return "removed via `hermes mcp remove`"
 
     return {"status": status, "connect": connect, "disconnect": disconnect}
@@ -87,17 +106,33 @@ def _claude():
                 "detail": (done.stdout or done.stderr).strip()[-300:]}
 
     def connect(_cfg=None):
-        cmd = studio.mcp_command()
+        argv = _forge_argv()
         # user scope so it is not tied to one project directory
-        args = ["mcp", "add", "--scope", "user", SERVER_NAME.lower(), *cmd]
-        if not _run([exe, *args]).returncode == 0:
+        if not _run([exe, "mcp", "add", "--scope", "user", FORGE_SERVER,
+                     "--", *argv]).returncode == 0:
             raise ForgeError("RBF-AGENT-003", "claude mcp add failed",
-                             hint="run manually: claude mcp add --scope user %s %s"
-                                  % (SERVER_NAME.lower(), " ".join(args[3:])))
-        return "added via `claude mcp add --scope user`"
+                             hint="run manually: claude mcp add --scope user %s -- %s"
+                                  % (FORGE_SERVER, " ".join(argv)))
+        # Claude has no global off-switch: seed every known project entry
+        # (and future sessions inherit from these) with the disable array.
+        # New directories start enabled - documented in README.
+        cfg_file = os.path.join(os.path.expanduser("~"), ".claude.json")
+        try:
+            data = json.load(open(cfg_file, encoding="utf-8"))
+            n = 0
+            for proj in (data.get("projects") or {}).values():
+                arr = proj.setdefault("disabledMcpServers", [])
+                if FORGE_SERVER not in arr:
+                    arr.append(FORGE_SERVER)
+                    n += 1
+            json.dump(data, open(cfg_file, "w", encoding="utf-8"), indent=2)
+            return ("added via `claude mcp add --scope user`; disabled in %d "
+                    "known project(s) - toggle on per-session with /mcp" % n)
+        except (OSError, ValueError):
+            return "added via `claude mcp add --scope user` (could not auto-disable)"
 
     def disconnect(_cfg=None):
-        _run([exe, "mcp", "remove", "-s", "user", SERVER_NAME.lower()])
+        _run([exe, "mcp", "remove", "-s", "user", FORGE_SERVER])
         return "removed via `claude mcp remove`"
 
     return {"status": status, "connect": connect, "disconnect": disconnect}
@@ -118,12 +153,14 @@ def _codex():
         st = status(cfg)
         if st and st["configured"]:
             return "already configured"
-        block = ('\n[mcp_servers.Roblox_Studio]\ncommand = "cmd.exe"\n'
-                 'args = ["/c", "%LOCALAPPDATA%\\\\Roblox\\\\mcp.bat"]\n')
+        argv = _forge_argv()
+        block = ('\n[mcp_servers.%s]\ncommand = "%s"\nargs = ["%s"]\n'
+                 "enabled = false\n" % (FORGE_SERVER, argv[0], argv[1]))
         _backup(cfg)
         with open(cfg, "a", encoding="utf-8") as handle:
             handle.write(block)
-        return "appended [mcp_servers.Roblox_Studio] to %s (backup saved)" % cfg
+        return ("appended [mcp_servers.%s] (enabled=false) to %s (backup saved); "
+                "flip enabled=true for Roblox sessions" % (FORGE_SERVER, cfg))
 
     def disconnect(cfg=None):
         cfg = cfg or cfg_path
@@ -131,9 +168,10 @@ def _codex():
             return "nothing to remove"
         _backup(cfg)
         text = open(cfg, encoding="utf-8", errors="replace").read()
-        out = re.sub(r"\n?\[mcp_servers\.Roblox_Studio\]\n(?:[^\[]*\n)?", "\n", text)
+        out = re.sub(r"\n?\[mcp_servers\.(?:%s|Roblox_Studio)\]\n(?:[^\[]*\n)?"
+                     % FORGE_SERVER, "\n", text)
         open(cfg, "w", encoding="utf-8").write(out)
-        return "removed Roblox_Studio block from %s (backup saved)" % cfg
+        return "removed robloxforge block from %s (backup saved)" % cfg
 
     return {"status": status, "connect": connect, "disconnect": disconnect}
 

@@ -29,6 +29,32 @@ rbforge skills install all          # install the two RobloxForge skills
 rbforge capabilities                # honest capability matrix (probed, not assumed)
 ```
 
+## Connecting agents (installed OFF by default — token discipline)
+
+The 11 `rb_*` MCP tools are useful during Roblox work but waste context in
+every other session. `rbforge agent connect` therefore wires the forge's
+MCP server **disabled** into each agent, and installs the two skills
+(always-on; they cost nothing until a Roblox prompt triggers them):
+
+```
+rbforge agent connect all       # or: hermes | claude | codex | grok
+rbforge skills install all
+rbforge agent status
+```
+
+Per-agent enable/disable:
+
+| Agent | Wired as | Enable for a Roblox session |
+|---|---|---|
+| Hermes | `robloxforge`, `enabled: false` | `hermes config set mcp_servers.robloxforge.enabled true`, restart |
+| Claude Code | user-scope + per-project disable array | `/mcp` toggle in-session (no global off-switch exists; brand-new dirs start enabled) |
+| Codex | `[mcp_servers.robloxforge] enabled = false` | flip the flag in `~/.codex/config.toml` |
+| Grok | same TOML shape | `grok mcp enable robloxforge` |
+
+Disable again when done to reclaim the tool schemas. The official Roblox
+Studio MCP (`roblox-studio` / `mcp.bat`) is separate and stays enabled — it
+is only useful when Studio is open anyway.
+
 ## The two skills (the actual product)
 
 - **roblox-game-development** — router skill: vertical slices per genre,
@@ -48,10 +74,10 @@ docs > verified community practice > model memory.
 | `skills/` | the two agent skills, installed into Hermes/Claude/Codex/Grok/Kimi |
 | `tests/run_tests.py` | 20 checks, no Roblox required |
 
-Register the MCP server alongside the official Roblox one:
+Register the MCP server manually (all agents, disabled) instead:
 
 ```
-hermes mcp add robloxforge --command python --args S:\Apps\Roblox Tools\RobloxForge\mcp_server\server.py
+python src\rbforge_cli.py agent connect all
 ```
 
 ## Status (v0.1.0 — honest)
