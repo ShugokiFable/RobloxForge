@@ -58,11 +58,15 @@ def _hermes():
 
     def connect(_cfg=None):
         cmd = studio.mcp_command()
-        if not _run([exe, "mcp", "add", SERVER_NAME.lower(),
-                     "--command", cmd[0], "--args", *cmd[1:]]) .returncode == 0:
-            raise ForgeError("RBF-AGENT-002", "hermes mcp add failed",
-                             hint="run it manually: hermes mcp add roblox_studio "
-                                  "--command %s --args %s" % (cmd[0], " ".join(cmd[1:])))
+        # `hermes mcp add` prompts "Enable all tools? [Y/n]" interactively;
+        # feed 'y' or it cancels and reports nothing.
+        done = _run([exe, "mcp", "add", SERVER_NAME.lower(),
+                     "--command", cmd[0], "--args", *cmd[1:]])
+        if done.returncode != 0 or "Saved" not in (done.stdout or ""):
+            raise ForgeError("RBF-AGENT-002", "hermes mcp add did not save the server",
+                             hint="run manually: hermes mcp add %s --command %s --args %s "
+                                  "(answer Y at the prompt)"
+                                  % (SERVER_NAME.lower(), cmd[0], " ".join(cmd[1:])))
         return "added via `hermes mcp add`"
 
     def disconnect(_cfg=None):
@@ -161,13 +165,34 @@ def _backup(path):
 
 # ------------------------------------------------------------------ public API
 
-def status(provider=None):
-    names = [provider] if provider else list(PROVIDERS)
-    if provider and provider not in PROVIDERS:
+def _one(provider):
+    """CLI may hand us a list; normalize to one provider name."""
+    if isinstance(provider, (list, tuple)):
+        if len(provider) != 1:
+            raise ForgeError("RBF-ARG-001", "connect takes exactly one provider",
+                             hint="got %r" % (list(provider),))
+        provider = provider[0]
+    if provider not in PROVIDERS:
         raise ForgeError("RBF-ARG-001", "unknown provider %r" % provider,
                          hint="one of: %s" % ", ".join(PROVIDERS))
+    return provider
+
+
+def _as_names(provider):
+    """Accept str | list | None everywhere; validate once."""
+    if provider is None:
+        return list(PROVIDERS)
+    names = [provider] if isinstance(provider, str) else list(provider)
+    bad = [n for n in names if n not in PROVIDERS]
+    if bad:
+        raise ForgeError("RBF-ARG-001", "unknown provider %r" % bad,
+                         hint="one of: %s" % ", ".join(PROVIDERS))
+    return names
+
+
+def status(provider=None):
     out = {}
-    for name in names:
+    for name in _as_names(provider):
         impl = globals()["_%s" % name]()
         entry = impl["status"]() or {"installed": False}
         entry.setdefault("agent_installed", impl["status"]() is not None)
@@ -176,18 +201,23 @@ def status(provider=None):
 
 
 def connect(provider):
-    impl = globals()["_%s" % provider]() if provider in PROVIDERS else None
-    if not impl or not impl.get("connect"):
-        raise ForgeError("RBF-AGENT-001",
-                         "automatic connect for %r is not supported yet" % provider,
-                         hint=status(provider)[provider].get("note"))
-    result = impl["connect"]()
-    return {"provider": provider, "result": result,
-            "verify": "restart %s, then run: rbforge doctor" % provider}
+    results = {}
+    for name in _as_names(provider):
+        impl = globals()["_%s" % name]()
+        if not impl.get("connect"):
+            raise ForgeError("RBF-AGENT-001",
+                             "automatic connect for %r is not supported yet" % name,
+                             hint=(impl["status"]() or {}).get("note"))
+        results[name] = {"provider": name, "result": impl["connect"](),
+                         "verify": "restart %s, then run: rbforge doctor" % name}
+    return results[provider] if isinstance(provider, str) else results
 
 
 def disconnect(provider):
-    impl = globals()["_%s" % provider]() if provider in PROVIDERS else None
-    if not impl or not impl.get("disconnect"):
-        raise ForgeError("RBF-AGENT-001", "disconnect for %r not supported" % provider)
-    return {"provider": provider, "result": impl["disconnect"]()}
+    results = {}
+    for name in _as_names(provider):
+        impl = globals()["_%s" % name]()
+        if not impl.get("disconnect"):
+            raise ForgeError("RBF-AGENT-001", "disconnect for %r not supported" % name)
+        results[name] = {"provider": name, "result": impl["disconnect"]()}
+    return results[provider] if isinstance(provider, str) else results
