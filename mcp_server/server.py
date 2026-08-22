@@ -190,6 +190,14 @@ def handle(req):
             return {"jsonrpc": "2.0", "id": req.get("id"),
                     "result": {"content": [{"type": "text", "text": _j(exc.to_dict())}],
                                "isError": True}}
+        except Exception as exc:  # noqa: BLE001 - a tool bug must never kill the server
+            return {"jsonrpc": "2.0", "id": req.get("id"),
+                    "result": {"content": [{"type": "text", "text": _j(
+                        {"ok": False, "error": {"code": "RBF-INTERNAL-001",
+                                                "message": "%s: %s" % (type(exc).__name__, exc),
+                                                "hint": "report this; the tool schema may "
+                                                        "not match its implementation"}})}],
+                               "isError": True}}
     return {"jsonrpc": "2.0", "id": req.get("id"),
             "error": {"code": -32601, "message": "method not found: %r" % method}}
 
