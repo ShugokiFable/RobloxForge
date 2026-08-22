@@ -161,13 +161,19 @@ def _j(obj):
 
 
 def handle(req):
+    if not isinstance(req, dict):
+        # a bare `[1]` or `"x"` on stdin must not kill the session
+        return {"jsonrpc": "2.0", "id": None,
+                "error": {"code": -32600, "message": "invalid request: not an object"}}
     method = req.get("method")
+    if "id" not in req:
+        return None  # notification: never answered, per JSON-RPC 2.0 / MCP
     if method == "initialize":
         return {"jsonrpc": "2.0", "id": req.get("id"),
                 "result": {"protocolVersion": PROTOCOL_VERSION,
                            "capabilities": {"tools": {}}, "serverInfo": SERVER_INFO}}
-    if method == "notifications/initialized" or method is None:
-        return None
+    if method == "notifications/initialized":
+        return None  # already handled above; kept for clarity
     if method == "ping":
         return {"jsonrpc": "2.0", "id": req.get("id"), "result": {}}
     if method == "tools/list":

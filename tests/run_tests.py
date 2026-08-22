@@ -306,6 +306,44 @@ def _():
             del skills._ROOTS["sbx2"]
 
 
+@check("agents: TOML block parses and removes cleanly (codex/grok)")
+def _():
+    from rbforge import agents
+    argv = ["C:\\Users\\x y\\py 3.11.exe", "C:\\repo\\mcp_server\\server.py"]  # worst case
+    block = agents._toml_block("robloxforge", argv)
+    import tomllib
+    doc = tomllib.loads("[mcp_servers.other]\ncommand = \"keep.exe\"\n" + block +
+                        "[mcp_servers.Roblox_Studio]\ncommand = \"official.exe\"\n")
+    assert doc["mcp_servers"]["other"]["command"] == "keep.exe"
+    assert doc["mcp_servers"]["robloxforge"]["enabled"] is False
+    assert doc["mcp_servers"]["Roblox_Studio"]["command"] == "official.exe"
+    cleaned = agents._toml_remove(
+        "[mcp_servers.other]\ncommand = \"keep.exe\"\n" + block +
+        "[mcp_servers.Roblox_Studio]\ncommand = \"official.exe\"\n", "robloxforge")
+    reparsed = tomllib.loads(cleaned)
+    assert "robloxforge" not in reparsed["mcp_servers"]
+    assert reparsed["mcp_servers"]["other"]["command"] == "keep.exe"
+    assert reparsed["mcp_servers"]["Roblox_Studio"]["command"] == "official.exe"
+
+
+@check("mcp server: notifications silent, junk JSON survives")
+def _():
+    import subprocess
+    p = subprocess.Popen([sys.executable, "mcp_server/server.py"],
+                         stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                         stderr=subprocess.PIPE, text=True,
+                         cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    out, err = p.communicate(
+        '{"jsonrpc":"2.0","method":"notifications/cancelled"}\n'
+        '[1]\n'
+        '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}\n', timeout=60)
+    lines = [l for l in out.splitlines() if l.strip()]
+    assert len(lines) == 2, "notification must get NO response: %r" % out
+    assert json.loads(lines[0])["error"]["code"] == -32600  # the [1]
+    assert "tools" in json.loads(lines[1])["result"]
+    assert p.returncode == 0
+
+
 # ---------------------------------------------------------------- helpers (moved above)
 
 if __name__ == "__main__":

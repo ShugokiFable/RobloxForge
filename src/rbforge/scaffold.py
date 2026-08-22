@@ -85,5 +85,5 @@ def scaffold(path, genre="generic"):
         with open(f, "w", encoding="utf-8") as fh:
             fh.write(content.replace("{genre}", genre))
     return {"path": os.path.abspath(path), "genre": genre,
-            "files": sorted(os.path.relpath(f, path).replace("\\\\", "/") for f in files),
+            "files": sorted(os.path.relpath(f, path).replace(os.sep, "/") for f in files),
             "next": "open Studio with a Baseplate, then follow VERIFY.md slice order"}

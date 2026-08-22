@@ -69,7 +69,7 @@ docs > verified community practice > model memory.
 
 | Piece | What |
 |---|---|
-| `src/rbforge_cli.py` | CLI — every command has `--json` |
+| `src/rbforge_cli.py` | CLI — every command prints JSON |
 | `mcp_server/server.py` | 11-tool MCP server (doctor, capabilities, docs, planning, reviews, receipts) |
 | `skills/` | the two agent skills, installed into Hermes/Claude/Codex/Grok/Kimi |
 | `tests/run_tests.py` | 20 checks, no Roblox required |

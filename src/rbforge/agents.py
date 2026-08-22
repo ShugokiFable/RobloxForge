@@ -51,10 +51,50 @@ FORGE_SERVER = "robloxforge"
 
 def _forge_argv():
     """[python, <repo>/mcp_server/server.py] resolved from THIS checkout,
-    so a clone anywhere works."""
+    so a clone anywhere works. Forward slashes: valid in Windows argv AND
+    valid inside TOML basic strings (backslashes would need escaping and
+    `\\U` in `C:\\Users` is a unicode escape that bricks codex's config)."""
     from . import paths
     script = os.path.join(paths.REPO_ROOT, "mcp_server", "server.py")
-    return [sys.executable or "python", script]
+    return [sys.executable or "python", script.replace("\\", "/")]
+
+
+def _toml_block(name, argv):
+    """A TOML table for one stdio MCP server. argv MUST be forward-slashed."""
+    safe = [a.replace("\\", "/") for a in argv]
+    return ('\n[mcp_servers.%s]\ncommand = "%s"\nargs = ["%s"]\n'
+            "enabled = false\n" % (name, safe[0], safe[1]))
+
+
+def _toml_remove(text, name):
+    """Delete ONLY the named server's keys from a TOML doc.
+
+    Line-based, because blocks contain `args = [...]` whose `[` defeats any
+    'up to next bracket' regex - and that regex variant also ate unrelated
+    tables (it deleted the official Roblox_Studio entry). Never touches
+    anything outside the named table.
+    """
+    out, skipping = [], False
+    for line in text.splitlines(keepends=True):
+        stripped = line.strip()
+        if stripped.startswith("["):
+            skipping = stripped == "[mcp_servers.%s]" % name
+        if not skipping:
+            out.append(line)
+    return "".join(out)
+
+
+def _toml_enabled(text, name):
+    """enabled state of a parsed TOML table; None when absent/unparseable."""
+    try:
+        import tomllib
+        data = tomllib.loads(text)
+    except Exception:  # ValueError on py3.11-, tomllib.TOMLDecodeError subclass
+        return None
+    table = data.get("mcp_servers", {}).get(name)
+    if not isinstance(table, dict):
+        return None
+    return bool(table.get("enabled", True))
 
 
 def _which(name):
@@ -121,6 +161,7 @@ def _claude():
         # New directories start enabled - documented in README.
         cfg_file = os.path.join(os.path.expanduser("~"), ".claude.json")
         try:
+            _backup(cfg_file)
             data = json.load(open(cfg_file, encoding="utf-8"))
             n = 0
             for proj in (data.get("projects") or {}).values():
@@ -156,12 +197,14 @@ def _codex():
         st = status(cfg)
         if st and st["configured"]:
             return "already configured"
-        argv = _forge_argv()
-        block = ('\n[mcp_servers.%s]\ncommand = "%s"\nargs = ["%s"]\n'
-                 "enabled = false\n" % (FORGE_SERVER, argv[0], argv[1]))
+        block = _toml_block(FORGE_SERVER, _forge_argv())
         _backup(cfg)
         with open(cfg, "a", encoding="utf-8") as handle:
             handle.write(block)
+        if _toml_enabled(open(cfg, encoding="utf-8").read(), FORGE_SERVER) is None:
+            raise ForgeError("RBF-AGENT-004",
+                             "wrote %s but the file no longer parses as TOML" % cfg,
+                             hint="restore from the .bak next to it and report this")
         return ("appended [mcp_servers.%s] (enabled=false) to %s (backup saved); "
                 "flip enabled=true for Roblox sessions" % (FORGE_SERVER, cfg))
 
@@ -171,10 +214,9 @@ def _codex():
             return "nothing to remove"
         _backup(cfg)
         text = open(cfg, encoding="utf-8", errors="replace").read()
-        out = re.sub(r"\n?\[mcp_servers\.(?:%s|Roblox_Studio)\]\n(?:[^\[]*\n)?"
-                     % FORGE_SERVER, "\n", text)
+        out = _toml_remove(text, FORGE_SERVER)
         open(cfg, "w", encoding="utf-8").write(out)
-        return "removed robloxforge block from %s (backup saved)" % cfg
+        return "removed robloxforge block from %s (official entries untouched; backup saved)" % cfg
 
     return {"status": status, "connect": connect, "disconnect": disconnect}
 
@@ -189,19 +231,15 @@ def _generic_unsupported(name):
 
 def _grok():
     cfg_path = os.path.join(os.path.expanduser("~"), ".grok", "config.toml")
-    block = ('\n[mcp_servers.robloxforge]\ncommand = "python"\n'
-             'args = ["S:/Apps/Roblox Tools/RobloxForge/mcp_server/server.py"]\n'
-             "enabled = false\n")
 
     def status(cfg=None):
         cfg = cfg or cfg_path
         if not os.path.isfile(cfg):
             return None
         text = open(cfg, encoding="utf-8", errors="replace").read()
-        present = "[mcp_servers.robloxforge]" in text
-        off = bool(re.search(r"\[mcp_servers\.robloxforge\][^\[]*?enabled\s*=\s*false",
-                             text, re.S))
-        return {"configured": present, "enabled": not off,
+        present = _toml_enabled(text, FORGE_SERVER) is not None
+        return {"configured": present,
+                "enabled": _toml_enabled(text, FORGE_SERVER),
                 "detail": "off by default; grok mcp enable robloxforge to use"}
 
     def connect(cfg=None):
@@ -211,8 +249,8 @@ def _grok():
             return "already configured"
         _backup(cfg)
         with open(cfg, "a", encoding="utf-8") as fh:
-            fh.write(block)
-        return "added [mcp_servers.robloxforge] (enabled=false) to %s" % cfg
+            fh.write(_toml_block(FORGE_SERVER, _forge_argv()))
+        return "added [mcp_servers.%s] (enabled=false) to %s" % (FORGE_SERVER, cfg)
 
     def disconnect(cfg=None):
         cfg = cfg or cfg_path
@@ -220,7 +258,7 @@ def _grok():
             return "nothing to remove"
         _backup(cfg)
         text = open(cfg, encoding="utf-8", errors="replace").read()
-        out = re.sub(r"\n?\[mcp_servers\.robloxforge\]\n(?:[^\[]*\n)?", "\n", text)
+        out = _toml_remove(text, FORGE_SERVER)
         open(cfg, "w", encoding="utf-8").write(out)
         return "removed robloxforge block from %s (backup saved)" % cfg
 
@@ -261,8 +299,9 @@ def status(provider=None):
     out = {}
     for name in _as_names(provider):
         impl = globals()["_%s" % name]()
-        entry = impl["status"]() or {"installed": False}
-        entry.setdefault("agent_installed", impl["status"]() is not None)
+        st = impl["status"]()
+        entry = st or {"installed": False}
+        entry.setdefault("agent_installed", st is not None)
         out[name] = entry
     return out
 

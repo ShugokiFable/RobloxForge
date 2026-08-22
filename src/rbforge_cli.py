@@ -2,7 +2,7 @@
 """rbforge CLI - every MCP tool has a CLI equivalent here.
 
 Exit codes: 0 ok, 1 generic, 2 validation, 3 not-found, 4 dependency, 5 refused.
---json on every command for machine consumption.
+All output is JSON (machine-readable by default).
 """
 import argparse
 import json
@@ -113,7 +113,10 @@ def _dispatch(args):
     if args.cmd == "skills":
         names = None if (not args.name or args.name == "all") else [args.name]
         if args.action == "status":
-            _emit(skills.status(names))
+            # status() covers every agent at once; filter client-side
+            st = skills.status()
+            _emit(st if names is None else {k: v for k, v in st.items()
+                                            if k in names})
         else:
             fn = {"install": skills.install, "update": skills.install,
                   "remove": skills.remove}[args.action]
