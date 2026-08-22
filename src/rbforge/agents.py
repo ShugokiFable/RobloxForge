@@ -245,19 +245,6 @@ def _backup(path):
 
 # ------------------------------------------------------------------ public API
 
-def _one(provider):
-    """CLI may hand us a list; normalize to one provider name."""
-    if isinstance(provider, (list, tuple)):
-        if len(provider) != 1:
-            raise ForgeError("RBF-ARG-001", "connect takes exactly one provider",
-                             hint="got %r" % (list(provider),))
-        provider = provider[0]
-    if provider not in PROVIDERS:
-        raise ForgeError("RBF-ARG-001", "unknown provider %r" % provider,
-                         hint="one of: %s" % ", ".join(PROVIDERS))
-    return provider
-
-
 def _as_names(provider):
     """Accept str | list | None everywhere; validate once."""
     if provider is None:
