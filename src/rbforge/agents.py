@@ -23,11 +23,11 @@ SERVER_NAME = "Roblox_Studio"
 
 
 def _mentions(text):
-    """True when output names our server under any naming convention."""
+    """True when output names our server (either registration name)."""
     if not text:
         return False
     low = text.lower()
-    return "roblox-studio" in low or "roblox_studio" in low
+    return "robloxforge" in low or "roblox-studio" in low or "roblox_studio" in low
 
 
 # ------------------------------------------------------------------ helpers
