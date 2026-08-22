@@ -26,3 +26,5 @@ Several target the ARCHIVED standalone MCP server (`Roblox/studio-rust-mcp-serve
 archived 2026-04); their assumptions about the tool surface are outdated.
 RobloxForge targets the built-in server and probes its live surface instead
 of hardcoding one.
+
+Machine-readable version of the upstream table: `knowledge/source-manifest.json`.

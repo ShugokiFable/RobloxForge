@@ -46,6 +46,11 @@ fix, re-run, THEN expand       -> vertical slice proven before adding systems
 - `references/ui-mobile.md` - ScreenGui, safe area, input for touch
 - `references/testing-debugging.md` - playtest scenarios, console triage
 - `references/sharp-edges.md` - the traps that break AI-built games
+- `references/game-design.md` - loop design: ACTION -> FEEDBACK -> REWARD -> REPEAT
+- `references/performance.md` - MicroProfiler-first optimization, known traps
+- `references/assets.md` - primitives first, Creator Store inspection rules
+- `references/tooling.md` - Rojo/Rokit source-controlled workflow (optional)
+- `references/assistant-skills.md` - routing to Roblox's built-in rbx-* skills
 
 ## When unsure about an API
 
