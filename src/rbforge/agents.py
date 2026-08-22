@@ -285,11 +285,15 @@ def connect(provider):
     for name in _as_names(provider):
         impl = globals()["_%s" % name]()
         if not impl.get("connect"):
-            raise ForgeError("RBF-AGENT-001",
-                             "automatic connect for %r is not supported yet" % name,
-                             hint=(impl["status"]() or {}).get("note"))
-        results[name] = {"provider": name, "result": impl["connect"](),
-                         "verify": "restart %s, then run: rbforge doctor" % name}
+            results[name] = {"provider": name,
+                             "error": "automatic connect for %r is not supported yet" % name,
+                             "hint": "add the official MCP manually; see README"}
+            continue
+        try:
+            results[name] = {"provider": name, "result": impl["connect"](),
+                             "verify": "restart %s, then run: rbforge doctor" % name}
+        except ForgeError as exc:
+            results[name] = exc.to_dict()
     return results[provider] if isinstance(provider, str) else results
 
 
@@ -298,6 +302,11 @@ def disconnect(provider):
     for name in _as_names(provider):
         impl = globals()["_%s" % name]()
         if not impl.get("disconnect"):
-            raise ForgeError("RBF-AGENT-001", "disconnect for %r not supported" % name)
-        results[name] = {"provider": name, "result": impl["disconnect"]()}
+            results[name] = {"provider": name,
+                             "error": "disconnect for %r not supported" % name}
+            continue
+        try:
+            results[name] = {"provider": name, "result": impl["disconnect"]()}
+        except ForgeError as exc:
+            results[name] = exc.to_dict()
     return results[provider] if isinstance(provider, str) else results
