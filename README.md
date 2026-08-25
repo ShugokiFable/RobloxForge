@@ -80,7 +80,7 @@ Register the MCP server manually (all agents, disabled) instead:
 python src\rbforge_cli.py agent connect all
 ```
 
-## Status (v0.1.0 — honest)
+## Status (v0.1.1 — honest)
 
 | Area | Status |
 |---|---|

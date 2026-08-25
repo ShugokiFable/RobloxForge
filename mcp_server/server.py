@@ -26,7 +26,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."
 from rbforge.errors import ForgeError
 
 PROTOCOL_VERSION = "2024-11-05"
-SERVER_INFO = {"name": "robloxforge", "version": "0.1.0"}
+SERVER_INFO = {"name": "robloxforge", "version": "0.1.1"}
 
 TOOLS = {}
 

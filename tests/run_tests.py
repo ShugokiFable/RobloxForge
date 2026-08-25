@@ -344,6 +344,46 @@ def _():
     assert p.returncode == 0
 
 
+@check("shipped skills are loadable: frontmatter closes and carries a description")
+def _():
+    """v0.1.0 shipped `roblox-docs/SKILL.md` as 214 bytes ending in the literal
+    text `...[truncated]`, with the frontmatter block never closed.
+
+    A frontmatter block that does not close is not a skill: a strict reader
+    never opens it, so the description -- the only thing an agent sees when
+    deciding whether to load the skill -- is gone. It installed cleanly into
+    every agent, occupied an index entry, and could never be selected. Nothing
+    checked, because nothing here read a SKILL.md as a skill.
+    """
+    import re
+    from rbforge import skills as skills_mod
+    root = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "skills")
+    for name in skills_mod.OUR_SKILLS:
+        path = os.path.join(root, name, "SKILL.md")
+        assert os.path.isfile(path), "%s: SKILL.md is missing" % name
+        raw = open(path, "rb").read()
+        assert not raw.startswith(b"\xef\xbb\xbf"), (
+            "%s: UTF-8 BOM before frontmatter -- a strict reader sees '\\ufeff---' "
+            "and never opens the block" % name)
+        text = raw.decode("utf-8")
+        m = re.match(r"(?s)^---\s*\n(.*?)\n---\s*\n", text)
+        assert m, ("%s: frontmatter block never closes -- this is not a loadable "
+                   "skill, it is a file that installs and can never be selected" % name)
+        fm = m.group(1)
+        dm = re.search(r"(?ms)^description:[ \t]*(.*?)(?=^[A-Za-z_-]+:|\Z)", fm)
+        assert dm and dm.group(1).strip(), (
+            "%s: no description -- the agent has nothing to match on" % name)
+        desc = " ".join(dm.group(1).split())
+        assert "[truncated]" not in text, (
+            "%s: contains the literal marker '[truncated]'. Authoring tooling cut "
+            "this file and it was committed that way." % name)
+        assert re.match(r"^name:\s*%s\s*$" % re.escape(name), fm, re.M), (
+            "%s: frontmatter name does not match its directory" % name)
+        assert len(text) > len(m.group(0)) + 200, (
+            "%s: frontmatter parses but there is no body worth loading" % name)
+        assert len(desc) > 40, "%s: description is too short to route on" % name
+
+
 # ---------------------------------------------------------------- helpers (moved above)
 
 if __name__ == "__main__":

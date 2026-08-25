@@ -275,7 +275,7 @@ def probe_mcp(timeout=25.0, list_studios=True):
                      "params": {"protocolVersion": PROTOCOL_VERSION,
                                 "capabilities": {},
                                 "clientInfo": {"name": "rbforge-doctor",
-                                               "version": "0.1.0"}}})
+                                               "version": "0.1.1"}}})
         init = _await_id(lines, 1, proc, timeout)
         if init is None:
             result["error"] = {
