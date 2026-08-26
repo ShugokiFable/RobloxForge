@@ -17,8 +17,25 @@ Studio) owns the live engine. RobloxForge never duplicates it.
 ## Quickstart
 
 ```
-START-HERE.bat          # or: python src\rbforge_cli.py doctor
+START-HERE.bat          # guided first run (installs skills, runs doctor)
 ```
+
+Or the scriptable lifecycle -- same work, no prompts, real exit codes:
+
+```
+.\Install.ps1                    # install the skills into your agents, then doctor
+.\Install.ps1 -ConnectMcp -Docs  # also wire the official Studio MCP and fetch docs
+.\Update.ps1                     # git pull, then refresh the agent-side copies
+.\Uninstall.ps1                  # remove the wiring RobloxForge put in your agents
+.\Uninstall.ps1 -WhatIfOnly      # show what would be removed, change nothing
+```
+
+RobloxForge runs from this checkout -- nothing is copied to `%LOCALAPPDATA%`.
+So `Uninstall.ps1` does the part that deleting the folder cannot: it un-wires
+the agents first, while the CLI that knows what it wrote still exists. Delete
+the folder without it and each agent keeps a skill for a tool that is gone and
+an MCP entry pointing at a path that no longer resolves. The checkout itself is
+left for you to remove.
 
 ```
 rbforge doctor                      # full health report, each fact independent
